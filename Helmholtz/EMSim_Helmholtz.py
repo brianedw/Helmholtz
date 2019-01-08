@@ -1,14 +1,9 @@
 
 # coding: utf-8
 
-# In[6]:
-
-x = [1,2,3]
-
-
 # ## Imports
 
-# In[9]:
+# In[1]:
 
 import math
 import numpy as np
@@ -24,7 +19,7 @@ import PIL
 from colorize import *
 
 
-# In[10]:
+# In[2]:
 
 from scipy.sparse.linalg import dsolve
 
@@ -37,18 +32,13 @@ from scipy.sparse.linalg import dsolve
 
 # ## Function Library
 
-# In[11]:
+# In[3]:
 
 class EMSim:
 
-    def __init__(self, xyShape=(10, 10), WL0=20,
-                 epsStart=1. + 0.j, epsEnd=2. + 0.01j,
-                 varBox=((0, 0), (0, 0))):
+    def __init__(self, xyShape=(10, 10), WL0=20):
         xMax, yMax = xyShape
         self.xyShape = xyShape
-        self.epsStart = epsStart
-        self.epsEnd = epsEnd
-        self.varBox = varBox
         self.WL0 = WL0  # Size of wl0 in 'pixels'
         self.margin = int(math.ceil(self.WL0))  # Size of PML in 'pixels'
         self.xyFullShape = tuple(
@@ -68,28 +58,18 @@ class EMSim:
         self.fullFields1D = self.fullFields.ravel()  # fields with PML as 1D vector
 
         # (n,m,3) fields into PML
-        self.fullGoal = np.zeros(ijShape, np.complex)
-        self.goal = self.fullGoal[m:-m, m:-m]
-        self.fullGoalMask = np.zeros(ijShape, np.uint8)
-        self.goalMask = self.fullGoalMask[m:-m, m:-m]
-
-        # (n,m,3) fields into PML
         self.fullSources = np.zeros(ijShape, np.complex)
         self.sources = self.fullSources[m:-m, m:-m]
         self.fullSources1D = self.fullSources.ravel()  # fields with PML as 1D vector
 
         # The three vars below are all views of the same data block
-        self.fullEps = np.full(ijShape, self.epsStart,
-                               np.complex)  # permittivity matrix
+        self.fullEps = np.full(ijShape, 1., np.complex)  # permittivity matrix
         self.eps = self.fullEps[m:-m, m:-m]  # permittivity matrix
         self.fullEps1D = self.fullEps.ravel()  # permittivity as 1D vector
 
-        ((xmin, xmax), (ymin, ymax)) = self.varBox
-        self.varEps = self.fullEps[m + ymin: m + ymax, m + xmin: m + xmax]
-
         # The three vars below are all views of the same data block
         # permeability matrix
-        self.fullMu = np.full(ijShape,  (1 - 0.j), np.complex)
+        self.fullMu = np.full(ijShape, 1., np.complex)
         self.mu = self.fullMu[m:-m, m:-m]
         self.fullMu1D = self.fullMu.ravel()  # permeability as 1D vector
 
@@ -119,66 +99,18 @@ class EMSim:
         (x, y) = xy
         self.sources[y, x] = val
 
-    def setGoalPoint(self, xy, val):
-        (x, y) = xy
-        self.goal[(y, x)] = val
-        self.goalMask[(y, x)] = 1
-
-    def getScore(self):
-        score = np.sum(np.abs(self.fields - self.goal)**2 * self.goalMask)
-        count = np.sum(self.goalMask)
-        aveError = score / count
-        return aveError
-
-    def getScoreAbs(self):
-        score = np.sum((np.abs(self.fields) - np.abs(self.goal))
-                       ** 2 * self.goalMask)
-        count = np.sum(self.goalMask)
-        aveError = score / count
-        return aveError
-
     def setEpsPoint(self, xy, eps):
         (x, y) = xy
         self.eps[y, x] = eps
 
-    def setMaterialPoint(self, xy, mat):
-        (x, y) = xy
-        self.eps[y, x] = (1 - mat) * self.epsStart + mat * self.epsEnd
-
-    def setVarMat1D(self, matArray):
-        newEps = (1 - matArray) * self.epsStart + matArray * self.epsEnd
-        newEps2D = newEps.reshape(self.varEps.shape)
-        self.varEps[:] = newEps2D
-
-    def getVarMat1D(self):
-        arrayReal = np.real(self.varEps)
-        minRange = np.real(self.epsStart)
-        maxRange = np.real(self.epsEnd)
-        rescaled = (arrayReal - minRange) /             (maxRange - minRange)  # range is now [0, 1]
-        return rescaled.ravel()
-
-    def setVarMat2D(self, matArray):
-        newEps2D = (1 - matArray) * self.epsStart + matArray * self.epsEnd
-        self.varEps[:] = newEps2D
-
-    def getVarMat2D(self):
-        arrayReal = np.real(self.varEps)
-        minRange = np.real(self.epsStart)
-        maxRange = np.real(self.epsEnd)
-        rescaled = (arrayReal - minRange) /             (maxRange - minRange)  # range is now [0, 1]
-        return rescaled
-
-    def visualizeMaterial(self, maxVal=2, zoom=3):
-        minVal = np.real(self.epsStart)
-        maxVal = np.real(self.epsEnd)
+    def visualizeMaterial(self, minVal, maxVal, zoom=3):
         pixArray = colorizeArray(self.eps[::-1], min_max=(minVal, maxVal),
                                  colors=([210, 210, 180], [255, 199, 0]),
                                  preFunc=lambda x: np.real(x))
-        zoom = 3
         image = PIL.Image.fromarray(pixArray)
         (ySize, xSize) = pixArray.shape[0:2]
         imageBig = image.resize(
-            (ySize * zoom, xSize * zoom), PIL.Image.NEAREST)
+            (xSize * zoom, ySize * zoom), PIL.Image.NEAREST)
         return imageBig
 
     def visualizeSources(self, zoom=3):
@@ -188,7 +120,7 @@ class EMSim:
         image = PIL.Image.fromarray(pixArray)
         (ySize, xSize) = pixArray.shape[0:2]
         imageBig = image.resize(
-            (ySize * zoom, xSize * zoom), PIL.Image.NEAREST)
+            (xSize * zoom, ySize * zoom), PIL.Image.NEAREST)
         return imageBig
 
     def visualizeGoal(self, zoom=3):
@@ -198,7 +130,7 @@ class EMSim:
         image = PIL.Image.fromarray(pixArray)
         (ySize, xSize) = pixArray.shape[0:2]
         imageBig = image.resize(
-            (ySize * zoom, xSize * zoom), PIL.Image.NEAREST)
+            (xSize * zoom, ySize * zoom), PIL.Image.NEAREST)
         return imageBig
 
     def visualizeFields(self, zoom=3, maxRange=1):
@@ -208,7 +140,7 @@ class EMSim:
         image = PIL.Image.fromarray(pixArray)
         (ySize, xSize) = pixArray.shape[0:2]
         imageBig = image.resize(
-            (ySize * zoom, xSize * zoom), PIL.Image.NEAREST)
+            (xSize * zoom, ySize * zoom), PIL.Image.NEAREST)
         return imageBig
 
     def visualizeFieldsMag(self, zoom=3, maxRange=1):
@@ -220,7 +152,7 @@ class EMSim:
         image = PIL.Image.fromarray(pixArray)
         (ySize, xSize) = pixArray.shape[0:2]
         imageBig = image.resize(
-            (ySize * zoom, xSize * zoom), PIL.Image.NEAREST)
+            (xSize * zoom, ySize * zoom), PIL.Image.NEAREST)
         return imageBig
 
     def visualizeFieldsMagWithAbsorber(self, zoom=3, maxRange=1):
@@ -232,7 +164,7 @@ class EMSim:
         image = PIL.Image.fromarray(pixArray)
         (ySize, xSize) = pixArray.shape[0:2]
         imageBig = image.resize(
-            (ySize * zoom, xSize * zoom), PIL.Image.NEAREST)
+            (xSize * zoom, ySize * zoom), PIL.Image.NEAREST)
         return imageBig
 
     def buildEquations(self):
@@ -250,7 +182,7 @@ class EMSim:
         self.fullFields1D[:] = X
 
 
-# In[12]:
+# In[4]:
 
 @njit
 def EzInd(xy, xyFullShape):
@@ -261,7 +193,7 @@ def EzInd(xy, xyFullShape):
     return j + (i * xMax)
 
 
-# In[13]:
+# In[5]:
 
 @njit
 def MakeEzEq(xy, shape, eps, mu, sx, sy, k0):
@@ -295,7 +227,7 @@ def MakeEzEq(xy, shape, eps, mu, sx, sy, k0):
     return (rowArray, colArray, coeffArray)
 
 
-# In[14]:
+# In[6]:
 
 @njit
 def allEqGen(fShape, epsArr, muArr, sxArr, syArr, k0):
@@ -316,11 +248,4 @@ def allEqGen(fShape, epsArr, muArr, sxArr, syArr, k0):
             colCoeffs.extend(newCol0)
             valCoeffs.extend(newVal0)
     return (rowCoeffs, colCoeffs, valCoeffs)
-
-
-# 
-
-# In[ ]:
-
-
 
